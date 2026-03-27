@@ -1,0 +1,6 @@
+# Ποτέ μην ανεβάζετε αυτά στο GitHub
+.streamlit/secrets.toml
+.env
+*.env
+__pycache__/
+*.pyc
