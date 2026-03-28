@@ -473,24 +473,29 @@ if user_input:
                 messages=api_messages,
             )
 
-            # Agentic loop — handles tool calls automatically
+            # Agentic loop — handles ALL tool_use blocks in each response
             while response.stop_reason == "tool_use":
-                tool_use_block = next(b for b in response.content if b.type == "tool_use")
-                query = tool_use_block.input.get("query", "")
-                num_res = tool_use_block.input.get("num_results", 8)
+                tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+                tool_results = []
 
-                with st.spinner(f"🔍 Αναζητώ: «{query}»..."):
-                    search_result = do_web_search(query, num_res)
+                for tool_use_block in tool_use_blocks:
+                    query = tool_use_block.input.get("query", "")
+                    num_res = tool_use_block.input.get("num_results", 8)
 
-                # Append assistant tool-use + tool result
-                api_messages.append({"role": "assistant", "content": response.content})
-                api_messages.append({
-                    "role": "user",
-                    "content": [{
+                    with st.spinner(f"🔍 Αναζητώ: «{query}»..."):
+                        search_result = do_web_search(query, num_res)
+
+                    tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tool_use_block.id,
                         "content": search_result
-                    }]
+                    })
+
+                # Append assistant turn + ALL tool results in one user turn
+                api_messages.append({"role": "assistant", "content": response.content})
+                api_messages.append({
+                    "role": "user",
+                    "content": tool_results
                 })
 
                 response = client.messages.create(
