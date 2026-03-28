@@ -440,40 +440,89 @@ if user_input:
     }
 
     def do_web_search(query: str, num_results: int = 8) -> str:
-        import time
-        last_error = ""
-        for attempt in range(3):
+        import requests
+        import xml.etree.ElementTree as ET
+        import html
+        import re
+
+        # Greek news RSS feeds
+        RSS_FEEDS = [
+            ("Καθημερινή",    "https://www.kathimerini.gr/rss"),
+            ("Proto Thema",   "https://www.protothema.gr/rss/"),
+            ("iefimerida",    "https://www.iefimerida.gr/feed"),
+            ("in.gr",         "https://www.in.gr/feed/"),
+            ("news247",       "https://news247.gr/feed/"),
+            ("Documento",     "https://www.documentonews.gr/feed/"),
+            ("Liberal",       "https://www.liberal.gr/feed/"),
+            ("Τα Νέα",        "https://www.tanea.gr/feed/"),
+            ("Εφημερίδα Συντακτών", "https://www.efsyn.gr/rss.xml"),
+            ("Avgi",          "https://www.avgi.gr/rss.xml"),
+            ("reporter.gr",   "https://www.reporter.gr/rss/"),
+            ("CNN Greece",    "https://www.cnn.gr/rss"),
+        ]
+
+        # Normalize query words for matching
+        def normalize(text):
+            return re.sub(r'[^\w\s]', '', text.lower())
+
+        q_words = [w for w in normalize(query).split() if len(w) > 2]
+
+        def strip_html(text):
+            text = re.sub(r'<[^>]+>', ' ', text or '')
+            return html.unescape(text).strip()
+
+        all_hits = []
+
+        for source, url in RSS_FEEDS:
             try:
-                with DDGS() as ddgs:
-                    results = list(ddgs.text(
-                        query,
-                        max_results=num_results,
-                        region="gr-el",
-                        timelimit="m"  # last month
-                    ))
-                if results:
-                    lines = []
-                    for i, r in enumerate(results, 1):
-                        lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
-                    return "\n\n".join(lines)
-                # If no results with timelimit, retry without it
-                with DDGS() as ddgs:
-                    results = list(ddgs.text(
-                        query,
-                        max_results=num_results,
-                        region="gr-el"
-                    ))
-                if results:
-                    lines = []
-                    for i, r in enumerate(results, 1):
-                        lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
-                    return "\n\n".join(lines)
-                return "Δεν βρέθηκαν αποτελέσματα για: " + query
-            except Exception as e:
-                last_error = str(e)
-                if attempt < 2:
-                    time.sleep(2)
-        return f"Αδυναμία αναζήτησης μετά από 3 προσπάθειες. Σφάλμα: {last_error}"
+                r = requests.get(url, timeout=6,
+                                 headers={"User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)"})
+                if r.status_code != 200:
+                    continue
+                root = ET.fromstring(r.content)
+                ns = {'atom': 'http://www.w3.org/2005/Atom'}
+                items = root.findall('.//item') + root.findall('.//atom:entry', ns)
+                for item in items:
+                    title_el = item.find('title') or item.find('atom:title', ns)
+                    desc_el  = item.find('description') or item.find('atom:summary', ns) or item.find('atom:content', ns)
+                    link_el  = item.find('link') or item.find('atom:link', ns)
+
+                    title = strip_html(title_el.text if title_el is not None else '')
+                    desc  = strip_html(desc_el.text  if desc_el  is not None else '')
+                    link  = (link_el.get('href') if link_el is not None and link_el.get('href')
+                             else (link_el.text if link_el is not None else ''))
+
+                    combined = normalize(title + ' ' + desc)
+                    score = sum(1 for w in q_words if w in combined)
+                    if score > 0:
+                        all_hits.append((score, source, title, link, desc[:400]))
+            except Exception:
+                continue
+
+        # Sort by relevance score
+        all_hits.sort(key=lambda x: -x[0])
+
+        if all_hits:
+            lines = []
+            for i, (score, source, title, link, body) in enumerate(all_hits[:num_results], 1):
+                lines.append(f"[{i}] [{source}] {title}\n{link}\n{body}")
+            return "\n\n".join(lines)
+
+        # Fallback: try DuckDuckGo
+        try:
+            import time
+            time.sleep(1)
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=num_results))
+            if results:
+                lines = []
+                for i, r in enumerate(results, 1):
+                    lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
+                return "\n\n".join(lines)
+        except Exception:
+            pass
+
+        return f"Δεν βρέθηκαν αποτελέσματα για: «{query}». Δοκιμάστε διαφορετικές λέξεις-κλειδιά."
 
     # Call Claude API with agentic loop
     with st.chat_message("assistant"):
