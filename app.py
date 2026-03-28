@@ -445,20 +445,97 @@ if user_input:
         import html
         import re
 
-        # Greek news RSS feeds
+        # Greek news RSS feeds — Εθνικά + 12 Περιφέρειες (εκτός Αττικής)
         RSS_FEEDS = [
-            ("Καθημερινή",    "https://www.kathimerini.gr/rss"),
-            ("Proto Thema",   "https://www.protothema.gr/rss/"),
-            ("iefimerida",    "https://www.iefimerida.gr/feed"),
-            ("in.gr",         "https://www.in.gr/feed/"),
-            ("news247",       "https://news247.gr/feed/"),
-            ("Documento",     "https://www.documentonews.gr/feed/"),
-            ("Liberal",       "https://www.liberal.gr/feed/"),
-            ("Τα Νέα",        "https://www.tanea.gr/feed/"),
-            ("Εφημερίδα Συντακτών", "https://www.efsyn.gr/rss.xml"),
-            ("Avgi",          "https://www.avgi.gr/rss.xml"),
-            ("reporter.gr",   "https://www.reporter.gr/rss/"),
-            ("CNN Greece",    "https://www.cnn.gr/rss"),
+            # ── ΕΘΝΙΚΑ ΜΜΕ (Top 50 SimilarWeb) ──────────────────────────
+            ("Καθημερινή",          "https://www.kathimerini.gr/rss"),
+            ("Proto Thema",         "https://www.protothema.gr/rss/"),
+            ("SKAI",                "https://www.skai.gr/news/rss"),
+            ("Ναυτεμπορική",        "https://www.naftemporiki.gr/feed/"),
+            ("iefimerida",          "https://www.iefimerida.gr/feed"),
+            ("in.gr",               "https://www.in.gr/feed/"),
+            ("news247",             "https://news247.gr/feed/"),
+            ("Documento",           "https://www.documentonews.gr/feed/"),
+            ("Liberal",             "https://www.liberal.gr/feed/"),
+            ("Τα Νέα",              "https://www.tanea.gr/feed/"),
+            ("To Vima",             "https://www.tovima.gr/feed/"),
+            ("Εφ. Συντακτών",       "https://www.efsyn.gr/rss.xml"),
+            ("Avgi",                "https://www.avgi.gr/rss.xml"),
+            ("Ελεύθερος Τύπος",     "https://www.eleftherostypos.gr/feed/"),
+            ("Lifo",                "https://www.lifo.gr/feed/"),
+            ("Έθνος",               "https://www.ethnos.gr/feed/"),
+            ("Newsit",              "https://www.newsit.gr/feed/"),
+            ("Newsbomb",            "https://www.newsbomb.gr/rss"),
+            ("Newsbeast",           "https://www.newsbeast.gr/rss-feed"),
+            ("News.gr",             "https://www.news.gr/rss-feed"),
+            ("Euro2day",            "https://www.euro2day.gr/rss/news_rss.xml"),
+            ("Zougla",              "https://www.zougla.gr/feed/"),
+            ("reporter.gr",         "https://www.reporter.gr/rss/"),
+            ("CNN Greece",          "https://www.cnn.gr/rss"),
+            ("Alfavita",            "https://www.alfavita.gr/feed/"),
+            ("Makeleio",            "https://makeleio.gr/feed/"),
+            ("Protagon",            "https://www.protagon.gr/feed/"),
+            ("Dikaiologitika",      "https://www.dikaiologitika.gr/feed/"),
+
+            # ── ΚΕΝΤΡΙΚΗ ΜΑΚΕΔΟΝΙΑ (Θεσσαλονίκη) ────────────────────────
+            ("Voria.gr",            "https://www.voria.gr/feed/"),
+            ("Thestival",           "https://www.thestival.gr/feed/"),
+            ("Typos Thessalonikis", "https://www.typosthes.gr/feed/"),
+
+            # ── ΘΕΣΣΑΛΙΑ (Λάρισα / Βόλος) ────────────────────────────────
+            ("OnLarissa",           "https://www.onlarissa.gr/feed/"),
+            ("LarissaNet",          "https://www.larissanet.gr/feed/"),
+            ("e-Thessalia",         "https://e-thessalia.gr/feed/"),
+
+            # ── ΔΥΤΙΚΗ ΕΛΛΑΔΑ (Πάτρα) ────────────────────────────────────
+            ("Pelop.gr",            "https://pelop.gr/feed/"),
+            ("PatrasToday",         "https://www.patrastoday.gr/feed/"),
+            ("TheBest.gr",          "https://www.thebest.gr/feed/"),
+
+            # ── ΠΕΛΟΠΟΝΝΗΣΟΣ ──────────────────────────────────────────────
+            ("Arcadia Portal",      "https://www.arcadiaportal.gr/feed/"),
+            ("PNA.gr",              "https://www.pna.gr/feed/"),
+            ("Peloponnisos.gr",     "https://www.peloponnisos.gr/feed/"),
+
+            # ── ΑΝΑΤΟΛΙΚΗ ΜΑΚΕΔΟΝΙΑ & ΘΡΑΚΗ ──────────────────────────────
+            ("KavalaPost",          "https://www.kavalapost.gr/feed/"),
+            ("Evros24",             "https://www.evros24.gr/feed/"),
+            ("AlexpolisOnline",     "https://www.alexpolisonline.com/feeds/posts/default"),
+
+            # ── ΗΠΕΙΡΟΣ (Ιωάννινα) ───────────────────────────────────────
+            ("EpirusPost",          "https://www.epiruspost.gr/feed/"),
+            ("EpirusNow",           "https://www.epirusnow.gr/feed/"),
+            ("Ηπειρωτικός Αγών",   "https://www.agon.gr/feed/"),
+
+            # ── ΣΤΕΡΕΑ ΕΛΛΑΔΑ (Λαμία) ────────────────────────────────────
+            ("LamiaReport",         "https://www.lamiareport.gr/feed/"),
+            ("Lamia1.gr",           "https://www.lamia1.gr/feed/"),
+            ("Fthiotis.gr",         "https://www.fthiotis.gr/feed/"),
+
+            # ── ΔΥΤΙΚΗ ΜΑΚΕΔΟΝΙΑ (Κοζάνη) ────────────────────────────────
+            ("KozaniLife",          "https://www.kozanilife.gr/feed/"),
+            ("Tharos Kozanis",      "https://tharos.gr/feed/"),
+            ("Kozan.gr",            "https://kozan.gr/feed/"),
+
+            # ── ΒΟΡΕΙΟ ΑΙΓΑΙΟ (Λέσβος / Χίος) ───────────────────────────
+            ("LesvosNews",          "https://www.lesvosnews.gr/feed/"),
+            ("Stonisi.gr",          "https://www.stonisi.gr/feed/"),
+            ("ChiosPress",          "https://chiospress.gr/feed/"),
+
+            # ── ΝΟΤΙΟ ΑΙΓΑΙΟ (Ρόδος / Κυκλάδες) ─────────────────────────
+            ("Rodiaki.gr",          "https://www.rodiaki.gr/feed/"),
+            ("Dimokratiki Rodou",   "https://www.dimokratiki.gr/feed/"),
+            ("Cyclades24",          "https://cyclades24.gr/feed/"),
+
+            # ── ΚΡΗΤΗ ─────────────────────────────────────────────────────
+            ("CretaLive",           "https://www.cretalive.gr/feed/"),
+            ("Νέα Κρήτη",           "https://www.neakriti.gr/feed/"),
+            ("Χανιώτικα Νέα",       "https://www.haniotika-nea.gr/feed/"),
+
+            # ── ΙΟΝΙΑ ΝΗΣΙΑ (Κέρκυρα / Ζάκυνθος) ────────────────────────
+            ("Enimerosi Kerkyras",  "https://www.enimerosi.com/feed/"),
+            ("IonianNews",          "https://www.ioniannews.gr/feed/"),
+            ("ZakynthosNews",       "https://www.zakynthosnews.gr/feed/"),
         ]
 
         # Normalize query words for matching
