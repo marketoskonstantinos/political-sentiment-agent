@@ -550,18 +550,24 @@ if user_input:
 
         all_hits = []
 
-        for source, url in RSS_FEEDS:
+        # ── Παράλληλο fetching με ThreadPoolExecutor (20x γρηγορότερο) ──
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def fetch_feed(source_url):
+            source, url = source_url
             try:
-                r = requests.get(url, timeout=6,
+                r = requests.get(url, timeout=4,
                                  headers={"User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)"})
                 if r.status_code != 200:
-                    continue
+                    return []
                 root = ET.fromstring(r.content)
                 ns = {'atom': 'http://www.w3.org/2005/Atom'}
                 items = root.findall('.//item') + root.findall('.//atom:entry', ns)
+                hits = []
                 for item in items:
                     title_el = item.find('title') or item.find('atom:title', ns)
-                    desc_el  = item.find('description') or item.find('atom:summary', ns) or item.find('atom:content', ns)
+                    desc_el  = (item.find('description') or item.find('atom:summary', ns)
+                                or item.find('atom:content', ns))
                     link_el  = item.find('link') or item.find('atom:link', ns)
 
                     title = strip_html(title_el.text if title_el is not None else '')
@@ -572,32 +578,52 @@ if user_input:
                     combined = normalize(title + ' ' + desc)
                     score = sum(1 for w in q_words if w in combined)
                     if score > 0:
-                        all_hits.append((score, source, title, link, desc[:400]))
+                        hits.append((score, source, title, link, desc[:400]))
+                return hits
             except Exception:
-                continue
+                return []
+
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {executor.submit(fetch_feed, sv): sv for sv in RSS_FEEDS}
+            for future in as_completed(futures):
+                all_hits.extend(future.result())
 
         # Sort by relevance score
         all_hits.sort(key=lambda x: -x[0])
 
-        if all_hits:
+        # Return RSS results if enough found (≥3 articles)
+        if len(all_hits) >= 3:
             lines = []
             for i, (score, source, title, link, body) in enumerate(all_hits[:num_results], 1):
                 lines.append(f"[{i}] [{source}] {title}\n{link}\n{body}")
             return "\n\n".join(lines)
 
-        # Fallback: try DuckDuckGo
+        # Fallback: DuckDuckGo (για τοπικούς πολιτικούς ή όταν RSS < 3 αποτελέσματα)
         try:
             import time
             time.sleep(1)
             with DDGS() as ddgs:
+                results = list(ddgs.text(query + " site:gr OR Ελλάδα", max_results=num_results))
+            if not results:
                 results = list(ddgs.text(query, max_results=num_results))
             if results:
                 lines = []
-                for i, r in enumerate(results, 1):
+                # Prepend any RSS hits we did find
+                for i, (score, source, title, link, body) in enumerate(all_hits[:3], 1):
+                    lines.append(f"[{i}] [{source}] {title}\n{link}\n{body}")
+                offset = len(lines) + 1
+                for i, r in enumerate(results[:num_results - len(lines)], offset):
                     lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
                 return "\n\n".join(lines)
         except Exception:
             pass
+
+        # Return whatever RSS found (even if < 3)
+        if all_hits:
+            lines = []
+            for i, (score, source, title, link, body) in enumerate(all_hits[:num_results], 1):
+                lines.append(f"[{i}] [{source}] {title}\n{link}\n{body}")
+            return "\n\n".join(lines)
 
         return f"Δεν βρέθηκαν αποτελέσματα για: «{query}». Δοκιμάστε διαφορετικές λέξεις-κλειδιά."
 
