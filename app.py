@@ -126,16 +126,14 @@ Queries δορυφορικών:
 Β — ML/Deep Learning: GreekBERT (Antypas et al., 2022) — κύριο μοντέλο | XLM-RoBERTa | LLM fallback: Claude
 
 ═══════════════════════════════════════════════════════
-3. ΠΡΩΤΟΚΟΛΛΟ ΔΙΕΥΚΡΙΝΙΣΤΙΚΩΝ ΕΡΩΤΗΣΕΩΝ [v7.3]
+3. ΠΡΩΤΟΚΟΛΛΟ ΑΝΑΛΥΣΗΣ [v7.8]
 ═══════════════════════════════════════════════════════
 
-ΚΑΝΟΝΑΣ: Πριν από κάθε ανάλυση, ο agent κάνει ΠΑΝΤΑ τις τρεις παρακάτω ερωτήσεις. Δεν ξεκινά ανάλυση χωρίς αυτές.
-
-| # | Ερώτηση | Γιατί χρειάζεται | Επιλογές |
-|---|---|---|---|
-| 1 | Χρονικό παράθυρο ανάλυσης | Ο agent προσαρμόζει αριθμό πηγών. | 7 ημέρες / Τελευταίος μήνας / Τελευταίο τρίμηνο |
-| 2 | Θεματικές ενότητες προτεραιότητας | Εστιάζει εκεί που ενδιαφέρεται ο χρήστης. | Έργα / Αντιπολίτευση / Εκλογές / Lifestyle / Όλα |
-| 3 | Επιθυμητό format παραδοτέου | Καθορίζει format. | Απάντηση στο chat / Word .docx |
+ΚΑΝΟΝΑΣ: Μόλις ο χρήστης αναφέρει πολιτικό, ο agent ξεκινά ΑΜΕΣΑ αναζήτηση με web_search — χωρίς καμία ερώτηση.
+- Χρονικό παράθυρο: Προεπιλογή = τελευταίος μήνας. Αν ο χρήστης ζητήσει διαφορετικό, το αλλάζεις.
+- Θεματικές: Προεπιλογή = ΟΛΕΣ. Δεν ρωτάς ποτέ για θεματικές.
+- Format παραδοτέου: ΠΑΝΤΑ απάντηση στο chat. Δεν ρωτάς ποτέ για format.
+ΠΟΤΕ μην ζητάς διευκρινίσεις πριν ψάξεις. Ψάχνεις πρώτα, αναλύεις μετά.
 
 3β. PUBLIC VOICE SIGNAL — Δημόσιες Φωνές [v7.7]
 ΚΑΝΟΝΑΣ: Σε κάθε ανάλυση ο agent αναζητά αν κάποιος με δημόσιο βήμα — ή απλός πολίτης που έγινε viral — έχει μιλήσει για θέμα που ΣΥΣΧΕΤΙΖΕΤΑΙ με τον πολιτικό.
@@ -383,7 +381,7 @@ if not st.session_state.messages:
             "- 🏛️ Civil Society Signal — ΜΚΟ, σύλλογοι, φορείς\n"
             "- 📢 Public Voice Signal — influencers, ειδικοί, viral πολίτες\n"
             "- 🎯 Δύο επίπεδα ανάλυσης: Expert + Απλός Αναγνώστης\n\n"
-            "**Πείτε μου ποιον πολιτικό θέλετε να αναλύσω** και θα σας ρωτήσω 3 διευκρινιστικές ερωτήσεις πριν ξεκινήσω."
+            "**Πείτε μου ποιον πολιτικό θέλετε να αναλύσω** και αναζητώ αμέσως στα ελληνικά ΜΜΕ."
         )
     })
 
@@ -442,17 +440,40 @@ if user_input:
     }
 
     def do_web_search(query: str, num_results: int = 8) -> str:
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=num_results))
-            if not results:
-                return "Δεν βρέθηκαν αποτελέσματα."
-            lines = []
-            for i, r in enumerate(results, 1):
-                lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
-            return "\n\n".join(lines)
-        except Exception as e:
-            return f"Σφάλμα αναζήτησης: {e}"
+        import time
+        last_error = ""
+        for attempt in range(3):
+            try:
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(
+                        query,
+                        max_results=num_results,
+                        region="gr-el",
+                        timelimit="m"  # last month
+                    ))
+                if results:
+                    lines = []
+                    for i, r in enumerate(results, 1):
+                        lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
+                    return "\n\n".join(lines)
+                # If no results with timelimit, retry without it
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(
+                        query,
+                        max_results=num_results,
+                        region="gr-el"
+                    ))
+                if results:
+                    lines = []
+                    for i, r in enumerate(results, 1):
+                        lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
+                    return "\n\n".join(lines)
+                return "Δεν βρέθηκαν αποτελέσματα για: " + query
+            except Exception as e:
+                last_error = str(e)
+                if attempt < 2:
+                    time.sleep(2)
+        return f"Αδυναμία αναζήτησης μετά από 3 προσπάθειες. Σφάλμα: {last_error}"
 
     # Call Claude API with agentic loop
     with st.chat_message("assistant"):
