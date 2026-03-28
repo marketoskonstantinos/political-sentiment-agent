@@ -1,5 +1,6 @@
 import streamlit as st
 import anthropic
+from duckduckgo_search import DDGS
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG
@@ -414,35 +415,104 @@ if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Call Claude API
-    with st.chat_message("assistant"):
-        with st.spinner("Αναλύω..."):
-            try:
-                client = anthropic.Anthropic(api_key=resolved_key)
+    # ── Web search tool definition ──────────────────────────────────────────
+    WEB_SEARCH_TOOL = {
+        "name": "web_search",
+        "description": (
+            "Ψάχνει σε ελληνικά ΜΜΕ και news sites για πληροφορίες σχετικές με "
+            "ελληνικούς πολιτικούς, κόμματα, δηλώσεις και πολιτικά γεγονότα. "
+            "Χρησιμοποίησε αυτό το tool για να βρεις πραγματικές, πρόσφατες ειδήσεις "
+            "πριν κάνεις την ανάλυση sentiment."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Η λέξη-κλειδί ή φράση αναζήτησης (ελληνικά ή αγγλικά)"
+                },
+                "num_results": {
+                    "type": "integer",
+                    "description": "Αριθμός αποτελεσμάτων (1-10, default 8)",
+                    "default": 8
+                }
+            },
+            "required": ["query"]
+        }
+    }
 
-                api_messages = [
-                    {"role": m["role"], "content": m["content"]}
-                    for m in st.session_state.messages
-                    if m["role"] in ("user", "assistant")
-                ]
+    def do_web_search(query: str, num_results: int = 8) -> str:
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=num_results))
+            if not results:
+                return "Δεν βρέθηκαν αποτελέσματα."
+            lines = []
+            for i, r in enumerate(results, 1):
+                lines.append(f"[{i}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}")
+            return "\n\n".join(lines)
+        except Exception as e:
+            return f"Σφάλμα αναζήτησης: {e}"
+
+    # Call Claude API with agentic loop
+    with st.chat_message("assistant"):
+        try:
+            client = anthropic.Anthropic(api_key=resolved_key)
+
+            api_messages = [
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages
+                if m["role"] in ("user", "assistant")
+            ]
+
+            response = client.messages.create(
+                model="claude-opus-4-5",
+                max_tokens=4096,
+                system=SYSTEM_PROMPT,
+                tools=[WEB_SEARCH_TOOL],
+                messages=api_messages,
+            )
+
+            # Agentic loop — handles tool calls automatically
+            while response.stop_reason == "tool_use":
+                tool_use_block = next(b for b in response.content if b.type == "tool_use")
+                query = tool_use_block.input.get("query", "")
+                num_res = tool_use_block.input.get("num_results", 8)
+
+                with st.spinner(f"🔍 Αναζητώ: «{query}»..."):
+                    search_result = do_web_search(query, num_res)
+
+                # Append assistant tool-use + tool result
+                api_messages.append({"role": "assistant", "content": response.content})
+                api_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_block.id,
+                        "content": search_result
+                    }]
+                })
 
                 response = client.messages.create(
                     model="claude-opus-4-5",
                     max_tokens=4096,
                     system=SYSTEM_PROMPT,
+                    tools=[WEB_SEARCH_TOOL],
                     messages=api_messages,
                 )
 
-                assistant_reply = response.content[0].text
-                st.markdown(assistant_reply)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": assistant_reply
-                })
+            assistant_reply = next(
+                (b.text for b in response.content if hasattr(b, "text")), ""
+            )
+            st.markdown(assistant_reply)
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": assistant_reply
+            })
 
-            except anthropic.AuthenticationError:
-                st.error("❌ Λάθος API key. Ελέγξτε και δοκιμάστε ξανά.")
-            except anthropic.RateLimitError:
-                st.error("⏳ Rate limit. Δοκιμάστε ξανά σε λίγα δευτερόλεπτα.")
-            except Exception as e:
-                st.error(f"❌ Σφάλμα: {str(e)}")
+        except anthropic.AuthenticationError:
+            st.error("❌ Λάθος API key. Ελέγξτε και δοκιμάστε ξανά.")
+        except anthropic.RateLimitError:
+            st.error("⏳ Rate limit. Δοκιμάστε ξανά σε λίγα δευτερόλεπτα.")
+        except Exception as e:
+            st.error(f"❌ Σφάλμα: {str(e)}")
